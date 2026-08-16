@@ -7,17 +7,17 @@ class RecipeListScreen extends StatefulWidget {
   const RecipeListScreen({super.key});
 
   @override
-  State createState() => _RecipeListScreenState();
+  State<RecipeListScreen> createState() => _RecipeListScreenState();
 }
 
-class _RecipeListScreenState extends State {
+class _RecipeListScreenState extends State<RecipeListScreen> {
   final RecipeRepository _repository = RecipeRepository();
   final ScrollController _scrollController = ScrollController();
 
-  final List _recipes = [];
+  final List<dynamic> _recipes = [];
   final int _limit = 10;
 
-  int _page = 0;
+  int _page = 1;
   int _totalRecipes = 0;
   bool _isLoading = true;
   bool _isFetchingMore = false;
@@ -30,15 +30,15 @@ class _RecipeListScreenState extends State {
     _scrollController.addListener(_onScroll);
   }
 
-  Future _loadInitialData() async {
+  Future<void> _loadInitialData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _page = 0;
+      _page = 1; // Səhifə 1-dən başlayır
     });
 
     try {
-      final result = await _repository.getRecipes(page: 0, limit: _limit);
+      final result = await _repository.getRecipes(page: 1, limit: _limit);
       setState(() {
         _recipes.clear();
         _recipes.addAll(result.recipes);
@@ -54,13 +54,22 @@ class _RecipeListScreenState extends State {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (!_scrollController.hasClients) return;
+
+    // Siyahının sonuna 100 piksel qalmış yeni məlumatları tetiklə
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+
+    if (currentScroll >= maxScroll - 100) {
       _loadMoreData();
     }
   }
 
-  Future _loadMoreData() async {
-    if (_isFetchingMore || _recipes.length >= _totalRecipes) return;
+  Future<void> _loadMoreData() async {
+    // Əgər artıq yüklənirsə və ya bütün reseptlər çəkilibsə dayandır
+    if (_isFetchingMore || (_totalRecipes > 0 && _recipes.length >= _totalRecipes)) {
+      return;
+    }
 
     setState(() => _isFetchingMore = true);
 
@@ -73,7 +82,8 @@ class _RecipeListScreenState extends State {
         _recipes.addAll(result.recipes);
         _isFetchingMore = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint("Pagination xətası: $e");
       setState(() => _isFetchingMore = false);
     }
   }
@@ -125,12 +135,13 @@ class _RecipeListScreenState extends State {
     return RefreshIndicator(
       onRefresh: _loadInitialData,
       child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         controller: _scrollController,
         itemCount: _recipes.length + (_isFetchingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == _recipes.length) {
             return const Padding(
-              padding: EdgeInsets.all(16.0),
+              padding: EdgeInsets.symmetric(vertical: 20.0),
               child: Center(child: CircularProgressIndicator()),
             );
           }
@@ -144,11 +155,20 @@ class _RecipeListScreenState extends State {
                 width: 56,
                 height: 56,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                placeholder: (context, url) => const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
                 errorWidget: (context, url, error) => const Icon(Icons.broken_image),
               ),
             ),
-            title: Text(recipe.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(
+              recipe.name,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             subtitle: Text('${recipe.cuisine} • ⭐ ${recipe.rating}'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
